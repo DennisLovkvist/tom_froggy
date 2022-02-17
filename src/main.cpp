@@ -87,7 +87,7 @@ int main()
 	b2Vec2 gravity(0.0f, 150.0f);
 	b2World world(gravity);
 
-	int PLATFORMS = 26;
+	int PLATFORMS = 36;
 	b2Body* platforms[PLATFORMS];
 
 	UserData* platform_user_data = new UserData();
@@ -98,7 +98,7 @@ int main()
 		platforms[i] = InitPlatform(world,platform_user_data);
 	}
 
-srand (time(NULL));
+	srand (time(NULL));
 	int spawn_y = view.getCenter().y + 30;
 	int n = 0;
 	for (size_t i = 1; i < PLATFORMS ; i++)
@@ -119,7 +119,7 @@ srand (time(NULL));
 		
 	}
 
-	platforms[0]->SetTransform(b2Vec2(view.getCenter().x,view.getCenter().y + 30),platforms[0]->GetAngle());
+	platforms[0]->SetTransform(b2Vec2(view.getCenter().x,view.getCenter().y + 20),platforms[0]->GetAngle());
 	
 	
 	
@@ -128,7 +128,7 @@ srand (time(NULL));
 	player_user_data->name = "player";
 
 	b2Body* player = InitPlayer(world,player_user_data);
-	player->SetTransform(b2Vec2(view.getCenter().x,	view.getCenter().y + 15),player->GetAngle());
+	player->SetTransform(b2Vec2(view.getCenter().x,	view.getCenter().y + 5),player->GetAngle());
 
 
 	my_contact_listener *contact_listener;
@@ -233,6 +233,18 @@ view.zoom(0.1f);
 				}
 				
 				
+			}
+
+			float dx = 1;
+			float dy = player->GetPosition().y - view.getCenter().y;
+			int dist = std::sqrt(dy*dy+dx*dx);
+
+			std::cout << dist << std::endl;
+
+		
+			if(dist > 40)
+			{
+				player->SetTransform(b2Vec2(1 + rand() % (( 160 + 1 ) - 1)-80,view.getCenter().y - 40),player->GetAngle());
 			}
 
 
