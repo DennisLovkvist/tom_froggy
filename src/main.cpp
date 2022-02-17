@@ -11,7 +11,9 @@
 #include <random>
 #include <string>
 #include "common.h"
-#include "MyContactListener.h"
+#include "my_contact_listener.h"
+#include <time.h> 
+#include <math.h>
 
 
 b2Body* InitPlatform(b2World &world,UserData* user_data_ptr)
@@ -20,7 +22,7 @@ b2Body* InitPlatform(b2World &world,UserData* user_data_ptr)
 	definition_body.position.Set(0, 0);
 	b2Body* body = world.CreateBody(&definition_body);
 	b2PolygonShape box;
-	box.SetAsBox(4.0f, 1.0f);
+	box.SetAsBox(5.0f, 1.0f);
 	
 	b2FixtureDef definition_fixture;
 	definition_fixture.shape = &box;
@@ -28,7 +30,7 @@ b2Body* InitPlatform(b2World &world,UserData* user_data_ptr)
 
 
 	b2PolygonShape sensor;
-	sensor.SetAsBox(3.4f, 0.8f);
+	sensor.SetAsBox(4.4f, 0.8f);
 	sensor.m_vertices[0].y -= 0.5f;
 	sensor.m_vertices[1].y -= 0.5f;
 	sensor.m_vertices[2].y -= 0.5f;
@@ -75,6 +77,8 @@ int main()
 
 	sf::RenderWindow window(sf::VideoMode(1280,720), "SFML works!", sf::Style::Close);
 
+	sf::View view = window.getDefaultView();
+	view.move(-1280/2,-720/2);
 	sf::Clock clock;
 	float dt = 1.f / 60.f;
 	float accumulator = 0.f;
@@ -83,7 +87,7 @@ int main()
 	b2Vec2 gravity(0.0f, 150.0f);
 	b2World world(gravity);
 
-	int PLATFORMS = 15;
+	int PLATFORMS = 26;
 	b2Body* platforms[PLATFORMS];
 
 	UserData* platform_user_data = new UserData();
@@ -94,13 +98,28 @@ int main()
 		platforms[i] = InitPlatform(world,platform_user_data);
 	}
 
-	for (size_t i = 0; i < PLATFORMS ; i++)
+srand (time(NULL));
+	int spawn_y = view.getCenter().y + 30;
+	int n = 0;
+	for (size_t i = 1; i < PLATFORMS ; i++)
 	{
-		int x = 1 + rand() % (( 50 + 1 ) - 1)-25;
-		int y = 1 + rand() % (( 50 + 1 ) - 1)-25;
+		int x = 1 + rand() % (( 160 + 1 ) - 1)-80;
+		int y = spawn_y;
 		platforms[i]->SetTransform(b2Vec2(x,y),platforms[i]->GetAngle());
+
+		if(n > 2)
+		{
+			spawn_y -= 10;
+			n = 0;
+		}
+		else
+		{
+			n++;
+		}
 		
 	}
+
+	platforms[0]->SetTransform(b2Vec2(view.getCenter().x,view.getCenter().y + 30),platforms[0]->GetAngle());
 	
 	
 	
@@ -109,7 +128,7 @@ int main()
 	player_user_data->name = "player";
 
 	b2Body* player = InitPlayer(world,player_user_data);
-
+	player->SetTransform(b2Vec2(view.getCenter().x,	view.getCenter().y + 15),player->GetAngle());
 
 
 	my_contact_listener *contact_listener;
@@ -132,9 +151,9 @@ int main()
 
 	sf::Vertex lines[8];
 
-	sf::View view = window.getDefaultView();
 
-	view.move(-1280/2,-720/2);
+
+view.zoom(0.1f);
 
 
 	while (window.isOpen())
@@ -194,7 +213,29 @@ int main()
 
 			world.Step(time_step, velocity_iterations, position_iterations);
 
+			view.move(0,-0.09f);
+
+
+			for (size_t i = 0; i < PLATFORMS ; i++)
+			{
+
+
+				float dx = 1;
+				float dy = platforms[i]->GetPosition().y - view.getCenter().y;
+				int dist = std::sqrt(dy*dy+dx*dx);
+
+				std::cout << dist << std::endl;
+
 			
+				if(dist > 40)
+				{
+					platforms[i]->SetTransform(b2Vec2(1 + rand() % (( 160 + 1 ) - 1)-80,view.getCenter().y - 40),platforms[i]->GetAngle());
+				}
+				
+				
+			}
+
+
 
 				UserData* ud = (UserData*)(player->GetFixtureList()[0].GetUserData().pointer);
 
@@ -243,7 +284,7 @@ int main()
 
 							b2PolygonShape* poly = (b2PolygonShape*) F->GetShape();
 
-							float mul = 10;
+							float mul = 1;
 
 							lines[0].position.x = B->GetWorldPoint(poly->m_vertices[0]).x*mul;	
 							lines[0].position.y = B->GetWorldPoint(poly->m_vertices[0]).y*mul;
