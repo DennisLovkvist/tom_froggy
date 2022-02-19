@@ -16,6 +16,9 @@
 #include <math.h>
 
 
+const int PLATFORMS = 36;
+const int ROPE_NODES = 15;
+
 b2Body* InitPlatform(b2World &world,UserData* user_data_ptr)
 {
 	b2BodyDef definition_body;
@@ -25,7 +28,9 @@ b2Body* InitPlatform(b2World &world,UserData* user_data_ptr)
 	box.SetAsBox(5.0f, 1.0f);
 	
 	b2FixtureDef definition_fixture;
-	definition_fixture.shape = &box;
+	definition_fixture.shape = &box;	
+	definition_fixture.filter.categoryBits = 1;
+	definition_fixture.filter.maskBits = 2;
 	body->CreateFixture(&definition_fixture);
 
 
@@ -57,8 +62,10 @@ b2Body* InitPlayer(b2World &world,UserData* user_data_ptr)
 	dynamic_box.SetAsBox(1.0f, 1.0f);
 	b2FixtureDef definition_fixture;
 	definition_fixture.shape = &dynamic_box;
-	definition_fixture.density = 1.0f;
-	definition_fixture.friction = 0.6f;
+	definition_fixture.density = 0.00001f;
+	definition_fixture.friction = 0.6f;	
+	definition_fixture.filter.categoryBits = 2;
+	definition_fixture.filter.maskBits = 1;
 	body->CreateFixture(&definition_fixture);
 
 	b2PolygonShape sensor;
@@ -71,6 +78,14 @@ b2Body* InitPlayer(b2World &world,UserData* user_data_ptr)
 
 	body->CreateFixture(&definition_fixture);
 	return body;
+}
+void DisableRope(b2Body *rope[ROPE_NODES], bool flag)
+{
+	for (size_t i = 0; i < ROPE_NODES; i++)
+	{
+		rope[i]->SetEnabled(flag);
+	}
+	
 }
 int main()
 {
@@ -87,7 +102,6 @@ int main()
 	b2Vec2 gravity(0.0f, 150.0f);
 	b2World world(gravity);
 
-	int PLATFORMS = 36;
 	b2Body* platforms[PLATFORMS];
 
 	UserData* platform_user_data = new UserData();
@@ -130,6 +144,80 @@ int main()
 	b2Body* player = InitPlayer(world,player_user_data);
 	player->SetTransform(b2Vec2(view.getCenter().x,	view.getCenter().y + 5),player->GetAngle());
 
+	b2Body* rope[ROPE_NODES];
+	b2DistanceJoint* joints[ROPE_NODES+1];
+
+	UserData* rope_user_data = new UserData();
+	rope_user_data->name = "rope";
+	rope_user_data->connected_platform = platforms[0];
+	rope_user_data->connect = false;
+
+	UserData* rope_end_user_data = new UserData();
+	rope_end_user_data->name = "rope_end";
+	rope_end_user_data->connected_platform = platforms[0];
+	rope_end_user_data->connect = false;
+	
+
+
+
+  
+
+
+	int y = 0;
+	for (size_t i = 0; i < ROPE_NODES; i++)
+	{
+		b2BodyDef definition_body;
+		definition_body.type = b2_dynamicBody;
+		definition_body.position.Set(1.0f, view.getCenter().y  + y++);	
+		definition_body.angularVelocity = 1.0;
+		rope[i] = world.CreateBody(&definition_body);
+
+		b2CircleShape circle;
+		circle.m_p.Set(0.0f, 0.0f);
+		circle.m_radius = (i == ROPE_NODES-1) ? 1.0 : 0.5;
+		b2FixtureDef definition_fixture;
+		definition_fixture.filter.groupIndex = 3;
+		definition_fixture.shape = &circle;
+		definition_fixture.density = (i == ROPE_NODES-1) ? 0.000001f : 0.00001f;
+		definition_fixture.friction = 0.6f;
+		definition_fixture.filter.categoryBits = 3;
+		definition_fixture.filter.maskBits = 1;
+		definition_fixture.isSensor = (i == ROPE_NODES-1);
+		definition_fixture.userData.pointer = (i == ROPE_NODES-1) ? reinterpret_cast<uintptr_t>(rope_end_user_data) : reinterpret_cast<uintptr_t>(rope_user_data);
+		rope[i]->CreateFixture(&definition_fixture);
+
+		if(i != 0)
+		{
+			
+			b2DistanceJointDef jd;
+			jd.bodyA = rope[i-1];
+			jd.bodyB = rope[i];
+			jd.collideConnected = false;
+			jd.length = 0.5f;
+			jd.maxLength = 1.0f;
+			joints[i] = (b2DistanceJoint*)world.CreateJoint(&jd);					
+		}
+	}
+
+	b2DistanceJointDef jd;
+	jd.bodyA = player;
+	jd.bodyB = rope[0];
+	jd.collideConnected = false;
+	jd.length = 1.0f;
+	jd.maxLength = 1.0f;
+	joints[0] = (b2DistanceJoint*)world.CreateJoint(&jd);
+
+
+
+
+
+
+
+
+
+	DisableRope(rope,false);
+
+
 
 	my_contact_listener *contact_listener;
 	contact_listener = new my_contact_listener();
@@ -145,15 +233,20 @@ int main()
 	bool double_jumping_allowed = false;
 	bool jumping_allowed = false;
 
+	bool rope_key_down = false;
+	bool cast_rope = false;
+	bool cut_rope = false;
+
 
 	bool jump_key_down;
 	bool jump_key_down_prev;
+	bool joint_exists = false;
 
 	sf::Vertex lines[8];
 
 
 
-view.zoom(0.1f);
+	view.zoom(0.1f);
 
 
 	while (window.isOpen())
@@ -184,6 +277,11 @@ view.zoom(0.1f);
                 {
 					player_walk_right = true;
                 }
+				if(event.key.code == sf::Keyboard::Space && !rope_key_down)
+                {
+					rope_key_down = true;
+					cast_rope = true;
+                }
 			}
 			if(event.type == sf::Event::KeyReleased)
 			{
@@ -199,6 +297,11 @@ view.zoom(0.1f);
                 {
 					jump_key_down = false;
                 }
+				if(event.key.code == sf::Keyboard::Space && rope_key_down)
+                {
+					cut_rope = true;
+					rope_key_down = false;
+                }
 			}
 
 			jump_key_down_prev = jump_key_down;
@@ -213,7 +316,7 @@ view.zoom(0.1f);
 
 			world.Step(time_step, velocity_iterations, position_iterations);
 
-			view.move(0,-0.09f);
+			//view.move(0,-0.09f);
 
 
 			for (size_t i = 0; i < PLATFORMS ; i++)
@@ -223,8 +326,6 @@ view.zoom(0.1f);
 				float dx = 1;
 				float dy = platforms[i]->GetPosition().y - view.getCenter().y;
 				int dist = std::sqrt(dy*dy+dx*dx);
-
-				std::cout << dist << std::endl;
 
 			
 				if(dist > 40)
@@ -239,7 +340,6 @@ view.zoom(0.1f);
 			float dy = player->GetPosition().y - view.getCenter().y;
 			int dist = std::sqrt(dy*dy+dx*dx);
 
-			std::cout << dist << std::endl;
 
 		
 			if(dist > 40)
@@ -249,37 +349,87 @@ view.zoom(0.1f);
 
 
 
+				
+
 				UserData* ud = (UserData*)(player->GetFixtureList()[0].GetUserData().pointer);
 
 				jumping_allowed = ud->collsisions > 0;
 
-				std::cout << jumping_allowed << std::endl;
-
 				if(player_walk_left)
 				{
-					player->ApplyForce(b2Vec2(-500,0),player->GetPosition(),true);
+					player->ApplyForce(b2Vec2(-0.005f,0),player->GetPosition(),true);
 				}
 				if(player_walk_right)
 				{
-					player->ApplyForce(b2Vec2(500,0),player->GetPosition(),true);
+					player->ApplyForce(b2Vec2(0.005f,0),player->GetPosition(),true);
 				}
 				if(player_jump && jumping_allowed)
 				{					
 					player_jump = false;
 					double_jumping_allowed = true;
-                    player->ApplyForce(b2Vec2(0,-15000),player->GetPosition(),true);
+                    player->ApplyForce(b2Vec2(0,-0.15f),player->GetPosition(),true);
 				}
 				if(player_jump && double_jumping_allowed)
 				{
 					double_jumping_allowed = false;
 					player_jump = false;
-                    player->ApplyForce(b2Vec2(0,-12000),player->GetPosition(),true);
+                    player->ApplyForce(b2Vec2(0,-0.12f),player->GetPosition(),true);
 				}
 
+				if(rope[ROPE_NODES-1]->IsEnabled())
+				{
 
-				
+					ud = (UserData*)(rope[ROPE_NODES-1]->GetFixtureList()[0].GetUserData().pointer);
+					
+					
 
+					if(ud->connect)
+					{
+						if(ud->connected_platform != nullptr)
+						{
+							if(!joint_exists)
+							{
+								joint_exists = true;
+								ud->connect = false;
+								b2DistanceJointDef jd;
+								jd.bodyA = ud->connected_platform;
+								jd.bodyB = rope[ROPE_NODES-1];
+								ud->connected_platform = nullptr;
+								jd.collideConnected = false;
+								jd.length = 1.0f;
+								jd.maxLength = 1.0f;
+								joints[ROPE_NODES] = (b2DistanceJoint*)world.CreateJoint(&jd);
+							}
+						}
+					}
+				}
 
+				if(cast_rope)
+				{
+					cast_rope = false;		
+
+					for (int i = ROPE_NODES-1; i >=0; i--)
+					{
+						rope[i]->SetTransform(player->GetPosition()-b2Vec2(0,i/2),0);
+						rope[i]->ApplyForce(b2Vec2(0,-i/8),rope[i]->GetPosition(),true);
+						
+					}
+								
+					DisableRope(rope,true);
+						
+
+				}
+
+				if(cut_rope)
+				{
+					cut_rope = false;
+					if(joint_exists)
+					{	
+						world.DestroyJoint(joints[ROPE_NODES]);
+						joint_exists = false;
+					}
+					DisableRope(rope,false);
+				}
 				
 
 			b2Body * B = world.GetBodyList();
@@ -325,6 +475,33 @@ view.zoom(0.1f);
 
 
 							window.draw(lines, 8, sf::Lines);
+						}
+						break;
+						case b2Shape::e_circle:
+						{
+
+
+							b2PolygonShape* poly = (b2PolygonShape*) F->GetShape();
+
+							float mul = 1;
+
+							sf::Vertex lines[16];
+
+							float r = 0;
+							float inc = (3.143*2)/8;
+							float radius = F->GetShape()->m_radius;
+							for (size_t i = 0; i < 15; i+=2)
+							{
+								lines[i].position.x = B->GetPosition().x + std::cos(r)*radius;
+								lines[i].position.y = B->GetPosition().y + std::sin(r)*radius;
+								r+=inc;
+								lines[i+1].position.x = B->GetPosition().x + std::cos(r)*radius;
+								lines[i+1].position.y = B->GetPosition().y + std::sin(r)*radius;
+							}
+							
+
+
+							window.draw(lines, 16, sf::Lines);
 						}
 						break;
 					}
